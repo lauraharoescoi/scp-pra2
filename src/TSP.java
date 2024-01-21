@@ -10,6 +10,9 @@ import java.util.Collections;
 import java.util.PriorityQueue;
 import java.util.Scanner;
 import java.util.Vector;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 
 public class TSP
@@ -123,6 +126,83 @@ public class TSP
         return solution;
     }
 
+    public void executeMethod(Methods method, int numThreads) {
+        switch(method) {
+            case FIXED_THREAD_POOL:
+                useFixedThreadPool(numThreads);
+                break;
+            case CACHED_THREAD_POOL:
+                useCachedThreadPool(numThreads);
+                break;
+            case FORK_JOIN_POOL:
+                useForkJoinPool(numThreads);
+                break;
+            default:
+                throw new IllegalArgumentException("Método de concurrencia no soportado");
+        }
+    }
+
+    private void useFixedThreadPool(int numThreads) {
+        ExecutorService executor = Executors.newFixedThreadPool(numThreads);
+
+        // Enviar tareas iniciales al pool
+        for (int i = 0; i < numThreads && !NodesQueue.isEmpty(); i++) {
+            Node nodoActual = popNode();
+            executor.submit(() -> processNode(nodoActual));
+        }
+
+        // Cierra el ExecutorService y espera a que todas las tareas terminen
+        executor.shutdown();
+        try {
+            if (!executor.awaitTermination(60, TimeUnit.SECONDS)) {
+                executor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            executor.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    private void processNode(Node node) {
+        // Incrementar el contador de nodos procesados.
+        synchronized (this) {
+            ProcessedNodes++;
+        }
+
+        // i almacena el número de la ciudad actual.
+        int i = node.getVertex();
+
+        // Si todas las ciudades han sido visitadas, es decir, si es una hoja en el árbol de búsqueda.
+        if (node.getLevel() == NCities - 1) {
+            // Completa el ciclo retornando a la ciudad de origen.
+            node.addPathStep(i, 0);
+
+            // Sincroniza el acceso a la solución actual para compararla y posiblemente actualizarla.
+            synchronized (this) {
+                if (getSolution() == null || node.getCost() < getSolution().getCost()) {
+                    setSolution(node);
+                    PurgeWorseNodes(node.getCost());
+                }
+            }
+        } else {
+            // Explora las ciudades no visitadas para crear nodos hijos.
+            for (int j = 0; j < NCities; j++) {
+                if (!node.cityVisited(j) && node.getCostMatrix(i, j) != INF) {
+                    Node child = new Node(this, node, node.getLevel() + 1, i, j);
+                    int child_cost = node.getCost() + node.getCostMatrix(i, j) + child.calculateCost();
+
+                    synchronized (this) {
+                        if (getSolution() == null || child_cost < getSolution().getCost()) {
+                            child.setCost(child_cost);
+                            pushNode(child);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+
     // Function to solve the traveling salesman problem using Branch and Bound
     public Node Solve(int CostMatrix[][])
     {
@@ -136,7 +216,7 @@ public class TSP
         //System.out.println(root);
 
         // Calculate the lower bound of the path starting at node 0
-       root.calculateSetCost();
+        root.calculateSetCost();
 
         // Add root to the list of live nodes
         pushNode(root);

@@ -1,0 +1,3 @@
+public enum Methods {
+    FIXED_THREAD_POOL, CACHED_THREAD_POOL, FORK_JOIN_POOL
+}
