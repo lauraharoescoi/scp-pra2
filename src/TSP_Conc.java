@@ -3,12 +3,12 @@ import java.util.concurrent.Executors;
 
 public class TSP_Conc {
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws InterruptedException {
         TSP tsp;
         int numThreads = Runtime.getRuntime().availableProcessors(); // Valor por defecto
         Methods method = Methods.FIXED_THREAD_POOL; // Valor por defecto
 
-        if (args.length < 1 || args.length > 3) {
+        if (args.length != 3) {
             System.err.println("Use: TSP_Conc [<Cities_File>] [<Num_Threads>] [<Concurrent_Method>]");
             return;
         }
@@ -35,7 +35,7 @@ public class TSP_Conc {
         }
 
         // Ejecutar la versión concurrente del TSP
-        tsp.executeMethod(method, numThreads);
+        tsp.executeMethod(method);
     }
 
 }

@@ -6,16 +6,8 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Collections;
-import java.util.PriorityQueue;
-import java.util.Scanner;
-import java.util.Vector;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-
-import java.util.concurrent.ForkJoinPool;
-import java.util.concurrent.RecursiveAction;
+import java.util.*;
+import java.util.concurrent.*;
 
 
 public class TSP
@@ -36,7 +28,7 @@ public class TSP
     // Statistics of purged and processed nodes.
     private long PurgedNodes = 0;
     private long ProcessedNodes = 0;
-
+    private CountDownLatch latch;
 
     // Getters & Setters
     public int getNCities() {
@@ -129,7 +121,8 @@ public class TSP
         return solution;
     }
 
-    public void executeMethod(Methods method, int numThreads) {
+    public void executeMethod(Methods method) throws InterruptedException {
+        int numThreads = NCities;
         switch(method) {
             case FIXED_THREAD_POOL:
                 useFixedThreadPool(numThreads);
@@ -145,16 +138,33 @@ public class TSP
         }
     }
 
-    private void useFixedThreadPool(int numThreads) {
+    private void useFixedThreadPool(int numThreads) throws InterruptedException {
         ExecutorService executor = Executors.newFixedThreadPool(numThreads);
+        System.out.println("\n___________________________________________________________________________________________________________________________________________________");
+        System.out.printf("Test with %d cities.\n",getNCities());
+
+        // Create a root node and calculate its cost. The TSP starts from the first city, i.e., node 0
+        Node root = new Node(this, DistanceMatrix);
+        //System.out.println(root);
+
+        // Calculate the lower bound of the path starting at node 0
+        root.calculateSetCost();
+
+        // Add root to the list of live nodes
+        pushNode(root);
+        if(NodesQueue.size() < numThreads) latch = new CountDownLatch(NodesQueue.size());
+        else latch = new CountDownLatch(numThreads);
 
         // Enviar tareas iniciales al pool
-        for (int i = 0; i < numThreads && !NodesQueue.isEmpty(); i++) {
-            Node currentNode = popNode();
-            executor.submit(() -> processNode(currentNode));
+        while (!NodesQueue.isEmpty()) {
+            System.out.println("Entro al bucle");
+                Node currentNode = popNode();
+                executor.submit(() -> {
+                    processNode(currentNode);
+                    latch.countDown();
+                });
+                latch.await();
         }
-
-        // Cierra el ExecutorService y espera a que todas las tareas terminen
         executor.shutdown();
         try {
             if (!executor.awaitTermination(60, TimeUnit.SECONDS)) {
@@ -164,12 +174,14 @@ public class TSP
             executor.shutdownNow();
             Thread.currentThread().interrupt();
         }
+        System.out.printf("\nFinal Total nodes: %d \tProcessed nodes: %d \tPurged nodes: %d \tPending nodes: %d \tBest Solution: %d.",root.getTotalNodes(), ProcessedNodes, PurgedNodes, NodesQueue.size(),getSolution()==null?0:getSolution().getCost());
+
     }
 
     private void useCachedThreadPool(int numThreads){
         ExecutorService executor = Executors.newCachedThreadPool();
 
-        for(int i = 0; i > numThreads && !NodesQueue.isEmpty(); ++i){
+        for(int i = 0; i < numThreads && !NodesQueue.isEmpty(); ++i){
             Node currentNode = popNode();
             executor.submit(() -> processNode(currentNode));
         }
@@ -199,6 +211,7 @@ public class TSP
     }
 
     private void processNode(Node node) {
+        PriorityQueue<Node> threadQueue = new PriorityQueue<>();
         // Incrementar el contador de nodos procesados.
         synchronized (this) {
             ProcessedNodes++;
@@ -222,21 +235,27 @@ public class TSP
         } else {
             // Explora las ciudades no visitadas para crear nodos hijos.
             for (int j = 0; j < NCities; j++) {
+                System.out.println("Entro a bucle 2");
                 if (!node.cityVisited(j) && node.getCostMatrix(i, j) != INF) {
                     Node child = new Node(this, node, node.getLevel() + 1, i, j);
                     int child_cost = node.getCost() + node.getCostMatrix(i, j) + child.calculateCost();
-
-                    synchronized (this) {
-                        if (getSolution() == null || child_cost < getSolution().getCost()) {
-                            child.setCost(child_cost);
-                            pushNode(child);
+                    if (getSolution() == null || child_cost < getSolution().getCost()) {
+                        child.setCost(child_cost);
+                        pushNode(child);
+                        //threadQueue.add(child);
+                        System.out.println("Afegeixo child");
+                    }
+                    else if (getSolution()!=null && child_cost>getSolution().getCost()) {
+                        synchronized (this){
+                            PurgedNodes++;
+                            System.out.println("Afegeixo purged");
                         }
-                        else if (getSolution()!=null && child_cost>getSolution().getCost())
-                                PurgedNodes++;
                     }
                 }
+                System.out.println("Acabo bucle");
             }
         }
+        System.out.println("Acabo funció");
     }
 
 
@@ -244,19 +263,6 @@ public class TSP
     public Node Solve(int CostMatrix[][])
     {
         Node min, child;
-
-        System.out.println("\n___________________________________________________________________________________________________________________________________________________");
-        System.out.printf("Test with %d cities.\n",getNCities());
-
-        // Create a root node and calculate its cost. The TSP starts from the first city, i.e., node 0
-        Node root = new Node(this, CostMatrix);
-        //System.out.println(root);
-
-        // Calculate the lower bound of the path starting at node 0
-        root.calculateSetCost();
-
-        // Add root to the list of live nodes
-        pushNode(root);
 
         // Pop a live node with the least cost, check it is a solution and adds its children to the list of live nodes.
         while ((min=popNode())!=null) // Pop the live node with the least estimated cost
@@ -313,7 +319,7 @@ public class TSP
     }
 
     // Add node to the queue of pending processing nodes
-    public void pushNode(Node node)
+    public synchronized void pushNode(Node node)
     {
         NodesQueue.add(node);
     }
