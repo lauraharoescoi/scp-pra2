@@ -131,12 +131,12 @@ public class TSP
             case FIXED_THREAD_POOL:
                 useFixedThreadPool(numThreads);
                 break;
-            case CACHED_THREAD_POOL:
-                useCachedThreadPool(numThreads);
-                break;
-            case FORK_JOIN_POOL:
-                useForkJoinPool(numThreads);
-                break;
+//            case CACHED_THREAD_POOL:
+//                useCachedThreadPool(numThreads);
+//                break;
+//            case FORK_JOIN_POOL:
+//                useForkJoinPool(numThreads);
+//                break;
             default:
                 throw new IllegalArgumentException("Método de concurrencia no soportado");
         }
@@ -147,8 +147,8 @@ public class TSP
 
         // Enviar tareas iniciales al pool
         for (int i = 0; i < numThreads && !NodesQueue.isEmpty(); i++) {
-            Node nodoActual = popNode();
-            executor.submit(() -> processNode(nodoActual));
+            Node currentNode = popNode();
+            executor.submit(() -> processNode(currentNode));
         }
 
         // Cierra el ExecutorService y espera a que todas las tareas terminen
@@ -196,6 +196,8 @@ public class TSP
                             child.setCost(child_cost);
                             pushNode(child);
                         }
+                        else if (getSolution()!=null && child_cost>getSolution().getCost())
+                                PurgedNodes++;
                     }
                 }
             }
@@ -270,7 +272,7 @@ public class TSP
             }
         }
 
-        if (true) System.out.printf("\nFinal Total nodes: %d \tProcessed nodes: %d \tPurged nodes: %d \tPending nodes: %d \tBest Solution: %d.",min.getTotalNodes(), ProcessedNodes, PurgedNodes, NodesQueue.size(),getSolution()==null?0:getSolution().getCost());
+        System.out.printf("\nFinal Total nodes: %d \tProcessed nodes: %d \tPurged nodes: %d \tPending nodes: %d \tBest Solution: %d.",min.getTotalNodes(), ProcessedNodes, PurgedNodes, NodesQueue.size(),getSolution()==null?0:getSolution().getCost());
 
         return getSolution();  // Return solution
     }

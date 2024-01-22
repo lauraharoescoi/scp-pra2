@@ -1,5 +1,6 @@
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import
 
 public class TSP_Conc {
 
@@ -21,7 +22,7 @@ public class TSP_Conc {
             try {
                 numThreads = Integer.parseInt(args[1]);
             } catch (NumberFormatException e) {
-                System.err.println("Number of threads must be an integer. Using 'FixedThreadPool' by default.");
+                System.err.println("Number of threads must be an integer. Using 4 threads.");
             }
         }
 
@@ -30,7 +31,7 @@ public class TSP_Conc {
             try {
                 method = Methods.valueOf(args[2].toUpperCase());
             } catch (IllegalArgumentException e) {
-                System.err.println("Método de concurrencia inválido. Usando 'FixedThreadPool' por defecto.");
+                System.err.println("Invalid concurrence method. Switching to FixedThreadPool.");
             }
         }
 
