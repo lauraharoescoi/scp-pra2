@@ -228,7 +228,7 @@ public class TSP
             } else {
                 executorService.shutdown();
             }
-        } catch (RuntimeException e) {
+        } catch (RuntimeException | ExecutionException | InterruptedException e) {
             e.printStackTrace();
         }
         printSolution("\nOptimal Solution: ", solution);
@@ -240,8 +240,81 @@ public class TSP
         return solution;
     }
 
-    public Node Solve_Conc(int CostMatrix[][]) {
+    public Node Solve_Conc(int CostMatrix[][]) throws ExecutionException, InterruptedException {
+        Node min;
+        LinkedList<Future<Node>> receivedNodes = new LinkedList<>();
 
+        System.out.println("\n___________________________________________________________________________________________________________________________________________________");
+        System.out.printf("Test with %d cities.\n", getNCities());
+
+        // Create a root node and calculate its cost. The TSP starts from the first city, i.e., node 0
+        Node root = new Node(this, CostMatrix);
+        //System.out.println(root);
+
+        // Calculate the lower bound of the path starting at node 0
+        root.calculateSetCost();
+
+        // Add root to the list of live nodes
+        pushNode(root);
+
+        // Pop a live node with the least cost, check it is a solution and adds its children to the list of live nodes.
+        while ((min = popNode()) != null) // Pop the live node with the least estimated cost
+        {
+            ProcessedNodes++;
+            if (true && (min.getTotalNodes() % 10000) == 0)
+                System.out.printf("Total nodes: %d \tProcessed nodes: %d \tPurged nodes: %d \tPending nodes: %d \tBest Solution: %d\r", min.getTotalNodes(), ProcessedNodes, PurgedNodes, NodesQueue.size(), getSolution() == null ? 0 : getSolution().getCost());
+            if (false && (min.getTotalNodes() % 10000) == 0) System.out.println(NodesQueue);
+            // i stores the current city number
+            int i = min.getVertex();
+
+            // If all cities are visited
+            if (min.getLevel() == NCities - 1) {
+                // Return to starting city
+                min.addPathStep(i, 0);
+
+                if (getSolution() == null || min.getCost() < getSolution().getCost()) {   // Found sub-optimal solution
+                    System.out.println("He entrat");
+                    setSolution(min);
+                    System.out.println(getSolution());
+
+                    // Remove nodes from Nodes queue that can not improved last found solution
+                    PurgeWorseNodes(min.getCost());
+                }
+            }
+            Future<Node> n;
+
+            for (int j = 0; j < NCities; j++){
+                if(!min.cityVisited(j) && min.getCostMatrix(i, j) != INF){
+                    if(method == Methods.FIXED_THREAD_POOL || method == Methods.CACHED_THREAD_POOL){
+                       n = executorService.submit(new ChildCalcThread(this, min, i, j));
+                       receivedNodes.add(n);
+                    } else{
+                       n = forkJoinPool.submit(new ChildCalcThread(this, min, i, j));
+                       receivedNodes.add(n);
+                    }
+                }
+            }
+            processNodeList(receivedNodes);
+            if(method == Methods.FIXED_THREAD_POOL || method == Methods.CACHED_THREAD_POOL) executorService.shutdown();
+            else forkJoinPool.shutdown();
+        }
+        System.out.printf("\nFinal Total nodes: %d \tProcessed nodes: %d \tPurged nodes: %d \tPending nodes: %d \tBest Solution: %d.", min.getTotalNodes(), ProcessedNodes, PurgedNodes, NodesQueue.size(), getSolution() == null ? 0 : getSolution().getCost());
+        return getSolution();
+    }
+
+    public void processNodeList(LinkedList<Future<Node>> nodes) throws ExecutionException, InterruptedException {
+        while(! (nodes.peek() == null)){
+            Future<Node> newN = nodes.poll();
+            if(newN.isDone()){
+                Node obtainedNode = newN.get();
+                if (getSolution()==null || obtainedNode.getCost()<getSolution().getCost())
+                {
+                    pushNode(obtainedNode);
+                }
+                else if (getSolution()!=null && obtainedNode.getCost()>getSolution().getCost())
+                    PurgedNodes++;
+            }
+        }
     }
 
 
