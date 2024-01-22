@@ -260,10 +260,11 @@ public class TSP
         // Pop a live node with the least cost, check it is a solution and adds its children to the list of live nodes.
         while ((min = popNode()) != null) // Pop the live node with the least estimated cost
         {
-            ProcessedNodes++;
-            if (true && (min.getTotalNodes() % 10000) == 0)
+            synchronized (this) {
+                ProcessedNodes++;
+            }
+            if ((min.getTotalNodes() % 10000) == 0)
                 System.out.printf("Total nodes: %d \tProcessed nodes: %d \tPurged nodes: %d \tPending nodes: %d \tBest Solution: %d\r", min.getTotalNodes(), ProcessedNodes, PurgedNodes, NodesQueue.size(), getSolution() == null ? 0 : getSolution().getCost());
-            if (false && (min.getTotalNodes() % 10000) == 0) System.out.println(NodesQueue);
             // i stores the current city number
             int i = min.getVertex();
 
@@ -274,7 +275,6 @@ public class TSP
 
                 if (getSolution() == null || min.getCost() < getSolution().getCost()) {   // Found sub-optimal solution
                     setSolution(min);
-                    System.out.println(getSolution());
 
                     // Remove nodes from Nodes queue that can not improved last found solution
                     PurgeWorseNodes(min.getCost());
@@ -293,8 +293,11 @@ public class TSP
                     {
                         pushNode(n.get());
                     }
-                    else if (getSolution()!=null && n.get().getCost()>getSolution().getCost())
-                        PurgedNodes++;
+                    else if (getSolution()!=null && n.get().getCost()>getSolution().getCost()){
+                        synchronized (this){
+                            PurgedNodes++;
+                        }
+                    }
                 }
             }
         }
@@ -305,10 +308,6 @@ public class TSP
         return getSolution();
     }
 
-
-
-
-
     // Add node to the queue of pending processing nodes
     public synchronized void pushNode(Node node)
     {
@@ -316,7 +315,7 @@ public class TSP
     }
 
     // Remove node from the queue of pending processing nodes
-    public Node popNode()
+    public synchronized Node popNode()
     {
         if (NodesQueue.peek()==null)
             return null;
