@@ -14,6 +14,9 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
+import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.RecursiveAction;
+
 
 public class TSP
 {
@@ -131,12 +134,12 @@ public class TSP
             case FIXED_THREAD_POOL:
                 useFixedThreadPool(numThreads);
                 break;
-//            case CACHED_THREAD_POOL:
-//                useCachedThreadPool(numThreads);
-//                break;
-//            case FORK_JOIN_POOL:
-//                useForkJoinPool(numThreads);
-//                break;
+            case CACHED_THREAD_POOL:
+                useCachedThreadPool(numThreads);
+                break;
+            case FORK_JOIN_POOL:
+                useForkJoinPool(numThreads);
+                break;
             default:
                 throw new IllegalArgumentException("Método de concurrencia no soportado");
         }
@@ -160,6 +163,38 @@ public class TSP
         } catch (InterruptedException e) {
             executor.shutdownNow();
             Thread.currentThread().interrupt();
+        }
+    }
+
+    private void useCachedThreadPool(int numThreads){
+        ExecutorService executor = Executors.newCachedThreadPool();
+
+        for(int i = 0; i > numThreads && !NodesQueue.isEmpty(); ++i){
+            Node currentNode = popNode();
+            executor.submit(() -> processNode(currentNode));
+        }
+        executor.shutdown();
+        try {
+            if (!executor.awaitTermination(60, TimeUnit.SECONDS)) {
+                executor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            executor.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    private void useForkJoinPool(int numThreads){
+        ForkJoinPool forkJoinPool = new ForkJoinPool();
+        for(int i = 0; i < numThreads && !NodesQueue.isEmpty(); ++i){
+            Node currentNode = popNode();
+            forkJoinPool.execute(() -> processNode(currentNode));
+        }
+        forkJoinPool.shutdown();
+        try{
+            forkJoinPool.awaitTermination(60, TimeUnit.SECONDS);
+        } catch (InterruptedException e){
+            e.printStackTrace();
         }
     }
 
