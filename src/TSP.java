@@ -242,7 +242,7 @@ public class TSP
 
     public Node Solve_Conc(int CostMatrix[][]) throws ExecutionException, InterruptedException {
         Node min;
-        LinkedList<Future<Node>> receivedNodes = new LinkedList<>();
+        //LinkedList<Future<Node>> receivedNodes = new LinkedList<>();
 
         System.out.println("\n___________________________________________________________________________________________________________________________________________________");
         System.out.printf("Test with %d cities.\n", getNCities());
@@ -273,7 +273,6 @@ public class TSP
                 min.addPathStep(i, 0);
 
                 if (getSolution() == null || min.getCost() < getSolution().getCost()) {   // Found sub-optimal solution
-                    System.out.println("He entrat");
                     setSolution(min);
                     System.out.println(getSolution());
 
@@ -287,35 +286,26 @@ public class TSP
                 if(!min.cityVisited(j) && min.getCostMatrix(i, j) != INF){
                     if(method == Methods.FIXED_THREAD_POOL || method == Methods.CACHED_THREAD_POOL){
                        n = executorService.submit(new ChildCalcThread(this, min, i, j));
-                       receivedNodes.add(n);
                     } else{
                        n = forkJoinPool.submit(new ChildCalcThread(this, min, i, j));
-                       receivedNodes.add(n);
                     }
+                    if (getSolution()==null || n.get().getCost()<getSolution().getCost())
+                    {
+                        pushNode(n.get());
+                    }
+                    else if (getSolution()!=null && n.get().getCost()>getSolution().getCost())
+                        PurgedNodes++;
                 }
             }
-            processNodeList(receivedNodes);
-            if(method == Methods.FIXED_THREAD_POOL || method == Methods.CACHED_THREAD_POOL) executorService.shutdown();
-            else forkJoinPool.shutdown();
         }
+        if(method == Methods.FIXED_THREAD_POOL || method == Methods.CACHED_THREAD_POOL) executorService.shutdown();
+        else forkJoinPool.shutdown();
+
         System.out.printf("\nFinal Total nodes: %d \tProcessed nodes: %d \tPurged nodes: %d \tPending nodes: %d \tBest Solution: %d.", min.getTotalNodes(), ProcessedNodes, PurgedNodes, NodesQueue.size(), getSolution() == null ? 0 : getSolution().getCost());
         return getSolution();
     }
 
-    public void processNodeList(LinkedList<Future<Node>> nodes) throws ExecutionException, InterruptedException {
-        while(! (nodes.peek() == null)){
-            Future<Node> newN = nodes.poll();
-            if(newN.isDone()){
-                Node obtainedNode = newN.get();
-                if (getSolution()==null || obtainedNode.getCost()<getSolution().getCost())
-                {
-                    pushNode(obtainedNode);
-                }
-                else if (getSolution()!=null && obtainedNode.getCost()>getSolution().getCost())
-                    PurgedNodes++;
-            }
-        }
-    }
+
 
 
 
