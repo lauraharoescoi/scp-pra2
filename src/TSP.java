@@ -220,7 +220,6 @@ public class TSP
         Instant start = Instant.now();
         Node solution = null;
 
-
         try {
             solution = Solve_Conc(DistanceMatrix);
             if (this.method == Methods.FORK_JOIN_POOL) {
@@ -242,67 +241,71 @@ public class TSP
 
     public Node Solve_Conc(int CostMatrix[][]) throws ExecutionException, InterruptedException {
         Node min;
-        //LinkedList<Future<Node>> receivedNodes = new LinkedList<>();
+        if (this.method == Methods.FORK_JOIN_POOL) {
+            Node root = new Node(this, CostMatrix);
+            root.calculateSetCost();
+            TSP_ForkJoinPool task = new TSP_ForkJoinPool(this, root);
+            return forkJoinPool.invoke(task);
+        } else {
 
-        System.out.println("\n___________________________________________________________________________________________________________________________________________________");
-        System.out.printf("Test with %d cities.\n", getNCities());
+            //LinkedList<Future<Node>> receivedNodes = new LinkedList<>();
 
-        // Create a root node and calculate its cost. The TSP starts from the first city, i.e., node 0
-        Node root = new Node(this, CostMatrix);
-        //System.out.println(root);
+            System.out.println("\n___________________________________________________________________________________________________________________________________________________");
+            System.out.printf("Test with %d cities.\n", getNCities());
 
-        // Calculate the lower bound of the path starting at node 0
-        root.calculateSetCost();
+            // Create a root node and calculate its cost. The TSP starts from the first city, i.e., node 0
+            Node root = new Node(this, CostMatrix);
+            //System.out.println(root);
 
-        // Add root to the list of live nodes
-        pushNode(root);
+            // Calculate the lower bound of the path starting at node 0
+            root.calculateSetCost();
 
-        // Pop a live node with the least cost, check it is a solution and adds its children to the list of live nodes.
-        while ((min = popNode()) != null) // Pop the live node with the least estimated cost
-        {
-            synchronized (this) {
-                ProcessedNodes++;
-            }
-            if ((min.getTotalNodes() % 10000) == 0)
-                System.out.printf("Total nodes: %d \tProcessed nodes: %d \tPurged nodes: %d \tPending nodes: %d \tBest Solution: %d\r", min.getTotalNodes(), ProcessedNodes, PurgedNodes, NodesQueue.size(), getSolution() == null ? 0 : getSolution().getCost());
-            // i stores the current city number
-            int i = min.getVertex();
+            // Add root to the list of live nodes
+            pushNode(root);
 
-            // If all cities are visited
-            if (min.getLevel() == NCities - 1) {
-                // Return to starting city
-                min.addPathStep(i, 0);
-
-                if (getSolution() == null || min.getCost() < getSolution().getCost()) {   // Found sub-optimal solution
-                    setSolution(min);
-
-                    // Remove nodes from Nodes queue that can not improved last found solution
-                    PurgeWorseNodes(min.getCost());
+            // Pop a live node with the least cost, check it is a solution and adds its children to the list of live nodes.
+            while ((min = popNode()) != null) // Pop the live node with the least estimated cost
+            {
+                synchronized (this) {
+                    ProcessedNodes++;
                 }
-            }
-            Future<Node> n;
+                if ((min.getTotalNodes() % 10000) == 0)
+                    System.out.printf("Total nodes: %d \tProcessed nodes: %d \tPurged nodes: %d \tPending nodes: %d \tBest Solution: %d\r", min.getTotalNodes(), ProcessedNodes, PurgedNodes, NodesQueue.size(), getSolution() == null ? 0 : getSolution().getCost());
+                // i stores the current city number
+                int i = min.getVertex();
 
-            for (int j = 0; j < NCities; j++){
-                if(!min.cityVisited(j) && min.getCostMatrix(i, j) != INF){
-                    if(method == Methods.FIXED_THREAD_POOL || method == Methods.CACHED_THREAD_POOL){
-                       n = executorService.submit(new ChildCalcThread(this, min, i, j));
-                    } else{
-                       n = forkJoinPool.submit(new ChildCalcThread(this, min, i, j));
+                // If all cities are visited
+                if (min.getLevel() == NCities - 1) {
+                    // Return to starting city
+                    min.addPathStep(i, 0);
+
+                    if (getSolution() == null || min.getCost() < getSolution().getCost()) {   // Found sub-optimal solution
+                        setSolution(min);
+
+                        // Remove nodes from Nodes queue that can not improved last found solution
+                        PurgeWorseNodes(min.getCost());
                     }
-                    if (getSolution()==null || n.get().getCost()<getSolution().getCost())
-                    {
-                        pushNode(n.get());
-                    }
-                    else if (getSolution()!=null && n.get().getCost()>getSolution().getCost()){
-                        synchronized (this){
-                            PurgedNodes++;
+                }
+                Future<Node> n;
+
+                for (int j = 0; j < NCities; j++) {
+                    if (!min.cityVisited(j) && min.getCostMatrix(i, j) != INF) {
+                        if (method == Methods.FIXED_THREAD_POOL || method == Methods.CACHED_THREAD_POOL) {
+                            n = executorService.submit(new ChildCalcThread(this, min, i, j));
+                        } else {
+                            n = forkJoinPool.submit(new ChildCalcThread(this, min, i, j));
+                        }
+                        if (getSolution() == null || n.get().getCost() < getSolution().getCost()) {
+                            pushNode(n.get());
+                        } else if (getSolution() != null && n.get().getCost() > getSolution().getCost()) {
+                            synchronized (this) {
+                                PurgedNodes++;
+                            }
                         }
                     }
                 }
             }
         }
-        if(method == Methods.FIXED_THREAD_POOL || method == Methods.CACHED_THREAD_POOL) executorService.shutdown();
-        else forkJoinPool.shutdown();
 
         System.out.printf("\nFinal Total nodes: %d \tProcessed nodes: %d \tPurged nodes: %d \tPending nodes: %d \tBest Solution: %d.", min.getTotalNodes(), ProcessedNodes, PurgedNodes, NodesQueue.size(), getSolution() == null ? 0 : getSolution().getCost());
         return getSolution();
